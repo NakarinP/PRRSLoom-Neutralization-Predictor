@@ -13,8 +13,8 @@ learning algorithms trained on experimental neutralization assay data
 to estimate neutralization outcomes, incorporating sequence‑derived 
 features such as amino acid physicochemical properties, genetic 
 distances, and structural protein patterns to generate predictions 
-with reported internal accuracy up to ~90–93% and validated external 
-accuracy of ~75–83% for the ORF5 model. The output includes downloadable 
+with reported internal accuracy up to 90–93% and validated external 
+accuracy of 83% for the ORF5 model. The output includes downloadable 
 summary tables and logs to support interpretation, while automatic 
 variant classification and comparisons to built‑in vaccine strains 
 help contextualize results. This tool is intended as a screening aid to 
