@@ -135,7 +135,7 @@ ui <- navbarPage(
                         style = "background-color: #e8f4f8; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
                         tags$p(style = "margin: 0; font-size: 95%;", 
                                tags$b("Welcome!"), " This tool predicts whether PRRSV-2 outbreak viruses will be neutralized by vaccine or LVI sera. 
-                               Both single-gene and multi-gene models show similar performance on internal test data (90-93% accuracy), 
+                               Both single-gene and multi-gene models show similar performance on internal test data (88-90% accuracy), 
                                but only the single-gene model has been validated with external test data (83% accuracy). 
                                Select a model, upload your sequences, and click 'Run Prediction' to get started. 
                                Check the ", tags$b("Help"), " tab for detailed instructions.")
@@ -239,7 +239,7 @@ ui <- navbarPage(
                  style = "background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin-bottom: 20px;",
                  tags$ul(
                    tags$li(tags$b("Algorithm:"), " LightGBM"),
-                   tags$li(tags$b("Internal validation:"), " 93% accuracy"),
+                   tags$li(tags$b("Internal validation:"), " 88% accuracy"),
                    tags$li(tags$b("External validation:"), " 83% accuracy"),
                    tags$li(tags$b("Key features:"), " Comparative indices of residue-specific biochemical properties of amino acids within the GP5 ectodomain (particularly in hypervariable regions 1 and 2), ORF5 genetic distance, and variant-level comparisons")
                  )
@@ -505,7 +505,7 @@ server <- function(input, output, session) {
         tags$p(strong("Low:"), " The outbreak virus is unlikely to be neutralized (predicted titer below average)."),
         tags$hr(),
         tags$p(style = "font-size: 90%; color: #666;", 
-               "Prediction based on a LightGBM model trained on GP5 ectodomain and sequence-derived features. Internal accuracy: 93%. External validation accuracy: 83%.")
+               "Prediction based on a LightGBM model trained on GP5 ectodomain and sequence-derived features. Internal accuracy: 88%. External validation accuracy: 83%.")
       )
     } else {
       tags$div(
