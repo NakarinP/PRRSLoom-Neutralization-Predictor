@@ -61,7 +61,6 @@ serum_nt_strains <- list(
 
 # Model paths
 # SINGLE-GENE
-knn_model_path <- "knn_vs_2class_model_ectodomain_boruta.RData"
 lightgbm_sg_model_path <- "lightgbm_vs_2class_model_ectodomain.txt"
 lightgbm_sg_features_path <- "lightgbm_vs_2class_model_ectodomain_features.csv"
 
@@ -137,7 +136,7 @@ ui <- navbarPage(
                         tags$p(style = "margin: 0; font-size: 95%;", 
                                tags$b("Welcome!"), " This tool predicts whether PRRSV-2 outbreak viruses will be neutralized by vaccine or LVI sera. 
                                Both single-gene and multi-gene models show similar performance on internal test data (90-93% accuracy), 
-                               but only the single-gene model has been validated with external test data (75-83% accuracy). 
+                               but only the single-gene model has been validated with external test data (83% accuracy). 
                                Select a model, upload your sequences, and click 'Run Prediction' to get started. 
                                Check the ", tags$b("Help"), " tab for detailed instructions.")
                       ),
@@ -239,9 +238,9 @@ ui <- navbarPage(
                tags$div(
                  style = "background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin-bottom: 20px;",
                  tags$ul(
-                   tags$li(tags$b("Algorithm:"), " Consensus between KNN and LightGBM"),
-                   tags$li(tags$b("Internal validation:"), " Up to 93% accuracy"),
-                   tags$li(tags$b("External validation:"), " 75-83% accuracy"),
+                   tags$li(tags$b("Algorithm:"), " LightGBM"),
+                   tags$li(tags$b("Internal validation:"), " 93% accuracy"),
+                   tags$li(tags$b("External validation:"), " 83% accuracy"),
                    tags$li(tags$b("Key features:"), " Comparative indices of residue-specific biochemical properties of amino acids within the GP5 ectodomain (particularly in hypervariable regions 1 and 2), ORF5 genetic distance, and variant-level comparisons")
                  )
                ),
@@ -341,8 +340,7 @@ ui <- navbarPage(
              tags$h4("Output Interpretation:", style = "color: #2F4F4F;"),
              tags$ul(
                tags$li(tags$b("High:"), " The outbreak virus is likely to be neutralized by the vaccine/LVI serum (predicted titer above average)"),
-               tags$li(tags$b("Low:"), " The outbreak virus is not likely to be neutralized (predicted titer below average)"),
-               tags$li(tags$b("Undetermined (Single-Gene only):"), " The KNN and LightGBM models disagree; actual neutralization assay is recommended")
+               tags$li(tags$b("Low:"), " The outbreak virus is not likely to be neutralized (predicted titer below average)")
              ),
              tags$hr(),
              
@@ -505,10 +503,9 @@ server <- function(input, output, session) {
         style = "background-color: #f8fff8; padding: 15px; border-radius: 5px; margin-bottom: 20px;",
         tags$p(strong("High:"), " The outbreak virus is likely to be neutralized by the vaccine/LVI serum (predicted titer above average)."),
         tags$p(strong("Low:"), " The outbreak virus is unlikely to be neutralized (predicted titer below average)."),
-        tags$p(strong("Undetermined:"), " The KNN and LightGBM models produced conflicting predictions. Laboratory neutralization assay is recommended."),
         tags$hr(),
         tags$p(style = "font-size: 90%; color: #666;", 
-               "Prediction based on consensus between KNN and LightGBM models. Internal accuracy: up to 93%. External validation accuracy: 75-83%.")
+               "Prediction based on a LightGBM model trained on GP5 ectodomain and sequence-derived features. Internal accuracy: 93%. External validation accuracy: 83%.")
       )
     } else {
       tags$div(
@@ -2128,72 +2125,23 @@ server <- function(input, output, session) {
           print(paste("Viral sequences with imputation:", length(viral_imputation)))
           print(paste("Serum sequences with imputation:", length(serum_imputation)))
           
-          # Load both models
-          knn_model_obj <- robust_load_model(knn_model_path)
+          # Load LightGBM model for single-gene
           lightgbm_model <- load_lightgbm_model(lightgbm_sg_model_path)
           
-          knn_model <- knn_model_obj$model
-          knn_features <- knn_model_obj$features
-          
-          # Load features with median values for imputation
+          # Load features with median values for imputation (single-gene feature list)
           lgb_features_df <- read.csv(lightgbm_sg_features_path, stringsAsFactors = FALSE)
           lgb_features <- lgb_features_df$feature
           median_values <- setNames(lgb_features_df$median, lgb_features_df$feature)
           
-          # Track imputed features
-          knn_imputed_features <- list()
-          lgb_imputed_features <- list()
-          
-          # Prepare features for KNN - impute with median
-          knn_missing_feats <- setdiff(knn_features, colnames(feature_df))
-          if (length(knn_missing_feats) > 0) {
-            print(paste("=== KNN Model: Imputing", length(knn_missing_feats), "missing features with median values ==="))
-            for (f in knn_missing_feats) {
-              if (f %in% names(median_values)) {
-                feature_df[[f]] <- median_values[[f]]
-                knn_imputed_features[[f]] <- list(type = "missing_column", median = median_values[[f]])
-              } else {
-                feature_df[[f]] <- 0
-                knn_imputed_features[[f]] <- list(type = "missing_column", median = 0)
-              }
-            }
-            print(paste("Missing features imputed:", paste(knn_missing_feats, collapse = ", ")))
-          }
-          
-          knn_feature_df <- feature_df[, knn_features, drop = FALSE]
-          
-          # Replace NA with median values for KNN and track by row
-          for (col in colnames(knn_feature_df)) {
-            na_idx <- which(is.na(knn_feature_df[[col]]))
-            if (length(na_idx) > 0) {
-              if (col %in% names(median_values)) {
-                knn_feature_df[[col]][na_idx] <- median_values[[col]]
-                # Get sequence pair names for these rows
-                for (row_idx in na_idx) {
-                  pair_name <- paste0(feature_df$outbreak_virus[row_idx], " vs ", feature_df$vaccine_LVI_virus[row_idx])
-                  print(paste("KNN - Imputing NA for feature '", col, "' in pair '", pair_name, "' with median:", median_values[[col]]))
-                }
-              } else {
-                knn_feature_df[[col]][na_idx] <- 0
-                for (row_idx in na_idx) {
-                  pair_name <- paste0(feature_df$outbreak_virus[row_idx], " vs ", feature_df$vaccine_LVI_virus[row_idx])
-                  print(paste("KNN - Imputing NA for feature '", col, "' in pair '", pair_name, "' with 0 (no median available)"))
-                }
-              }
-            }
-          }
-          
-          # Prepare features for LightGBM - impute with median
+          # Impute missing feature columns using median values
           lgb_missing_feats <- setdiff(lgb_features, colnames(feature_df))
           if (length(lgb_missing_feats) > 0) {
-            print(paste("=== LightGBM Model: Imputing", length(lgb_missing_feats), "missing features with median values ==="))
+            print(paste("=== LightGBM (single-gene): Imputing", length(lgb_missing_feats), "missing features with median values ==="))
             for (f in lgb_missing_feats) {
               if (f %in% names(median_values)) {
                 feature_df[[f]] <- median_values[[f]]
-                lgb_imputed_features[[f]] <- list(type = "missing_column", median = median_values[[f]])
               } else {
                 feature_df[[f]] <- 0
-                lgb_imputed_features[[f]] <- list(type = "missing_column", median = 0)
               }
             }
             print(paste("Missing features imputed:", paste(lgb_missing_feats, collapse = ", ")))
@@ -2201,64 +2149,48 @@ server <- function(input, output, session) {
           
           lgb_feature_df <- feature_df[, lgb_features, drop = FALSE]
           
-          # Replace NA with median values for LightGBM and track by row
+          # Replace NA with median values for LightGBM and print examples
+          na_imputation_count <- 0
           for (col in colnames(lgb_feature_df)) {
             na_idx <- which(is.na(lgb_feature_df[[col]]))
             if (length(na_idx) > 0) {
               if (col %in% names(median_values)) {
                 lgb_feature_df[[col]][na_idx] <- median_values[[col]]
-                # Get sequence pair names for these rows
-                for (row_idx in na_idx) {
+                for (row_idx in na_idx[1:min(3, length(na_idx))]) {
                   pair_name <- paste0(feature_df$outbreak_virus[row_idx], " vs ", feature_df$vaccine_LVI_virus[row_idx])
-                  print(paste("LightGBM - Imputing NA for feature '", col, "' in pair '", pair_name, "' with median:", median_values[[col]]))
+                  print(paste("LightGBM - Imputing NA for feature '", col, "' in pair '", pair_name, "' with median:", round(median_values[[col]], 4)))
+                }
+                if (length(na_idx) > 3) {
+                  print(paste("  ... and", length(na_idx) - 3, "more NA values for", col))
                 }
               } else {
                 lgb_feature_df[[col]][na_idx] <- 0
-                for (row_idx in na_idx) {
+                for (row_idx in na_idx[1:min(3, length(na_idx))]) {
                   pair_name <- paste0(feature_df$outbreak_virus[row_idx], " vs ", feature_df$vaccine_LVI_virus[row_idx])
                   print(paste("LightGBM - Imputing NA for feature '", col, "' in pair '", pair_name, "' with 0 (no median available)"))
                 }
               }
+              na_imputation_count <- na_imputation_count + length(na_idx)
             }
           }
           
-          # Summary of imputation
           print("=== Imputation Summary ===")
-          print(paste("KNN - Total features imputed (missing columns):", length(knn_missing_feats)))
           print(paste("LightGBM - Total features imputed (missing columns):", length(lgb_missing_feats)))
+          print(paste("LightGBM - Total NA values imputed:", na_imputation_count))
           
-          # Predictions
-          knn_preds <- predict(knn_model, knn_feature_df)
-          knn_probs <- predict(knn_model, knn_feature_df, type = "prob")
-          
+          # Predictions (LightGBM only)
           lgb_matrix <- as.matrix(lgb_feature_df)
           lgb_raw_preds <- predict(lightgbm_model, lgb_matrix)
           lgb_probs_high <- lgb_raw_preds
           lgb_probs_low <- 1 - lgb_raw_preds
           lgb_preds <- ifelse(lgb_raw_preds > 0.5, "high", "low")
           
-          # Consensus predictions
-          consensus_preds <- character(length(knn_preds))
-          for (i in 1:length(knn_preds)) {
-            if (as.character(knn_preds[i]) == lgb_preds[i]) {
-              consensus_preds[i] <- as.character(knn_preds[i])
-            } else {
-              consensus_preds[i] <- "undetermined"
-            }
-          }
-          
-          # Build prediction table
+          # Build prediction table matching multi-gene column names
           pred_table <- feature_df[,c("vaccine_LVI_virus","outbreak_virus")]
-          pred_table[["Final Neutralizing Titer Prediction"]] <- consensus_preds
-          pred_table[["KNN model"]] <- as.character(knn_preds)
-          pred_table[["KNN probability"]] <- ifelse(knn_preds == "high", 
-                                                    round(knn_probs[,"high"], 3),
-                                                    round(knn_probs[,"low"], 3))
-          pred_table[["LightGBM model"]] <- lgb_preds
-          pred_table[["LightGBM probability"]] <- ifelse(lgb_preds == "high",
-                                                         round(lgb_probs_high, 3),
-                                                         round(lgb_probs_low, 3))
-          
+          pred_table[["Neutralizing Titer Prediction"]] <- lgb_preds
+          pred_table[["Prediction Probability"]] <- ifelse(lgb_preds == "high",
+                                                           round(lgb_probs_high, 3),
+                                                           round(lgb_probs_low, 3))
           pred_table <- merge(pred_table, variant_info_df, by = c("vaccine_LVI_virus", "outbreak_virus"), all.x = TRUE)
           values$predictionTable <- pred_table
           
@@ -2267,7 +2199,7 @@ server <- function(input, output, session) {
           values$showError <- FALSE
           values$showResults <- TRUE
           
-          # Build imputation summary message
+          # Build imputation summary message (LightGBM-only)
           if (length(viral_imputation) > 0 || length(serum_imputation) > 0) {
             imputation_msg <- "\n=== Imputation Summary ===\n"
             imputation_msg <- paste0(imputation_msg, 
@@ -2296,7 +2228,7 @@ server <- function(input, output, session) {
               list(className = 'dt-center', targets = "_all"),
               list(render = JS("function(data, type, row) {
                 return type === 'display' && data != null ? Number(data).toFixed(3) : data;
-              }"), targets = c(4,6))
+              }"), targets = 3)
             )
           ), rownames = FALSE, class = 'cell-border stripe')
           
